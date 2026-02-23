@@ -30,6 +30,7 @@ interface VisualizerProps {
   lyrics: LyricLine[];
   currentTime: number;
   circleConfig: ElementConfig;
+  heartbeatConfig: ElementConfig;
   waveConfig: ElementConfig;
   subtleWaveConfig: ElementConfig;
   midiConfig: ElementConfig;
@@ -39,12 +40,14 @@ interface VisualizerProps {
 }
 
 const Visualizer = forwardRef<HTMLCanvasElement, VisualizerProps>(({
-  analyser, isPlaying, lyrics, currentTime, circleConfig, waveConfig, subtleWaveConfig, midiConfig, lyricsConfig, backgroundMedia, backgroundDim = 0.75
+  analyser, isPlaying, lyrics, currentTime, circleConfig, heartbeatConfig, waveConfig, subtleWaveConfig, midiConfig, lyricsConfig, backgroundMedia, backgroundDim = 0.75
 }, ref) => {
   const internalCanvasRef = useRef<HTMLCanvasElement>(null);
   const requestRef = useRef<number>();
   const smoothedMoodRef = useRef({ r: 100, g: 50, b: 255, hueOffset: 0 });
   const midiHistoryRef = useRef<Uint8Array[]>([]);
+  const heartbeatScaleRef = useRef(0);
+
 
   useImperativeHandle(ref, () => internalCanvasRef.current as HTMLCanvasElement);
 
@@ -182,6 +185,64 @@ const Visualizer = forwardRef<HTMLCanvasElement, VisualizerProps>(({
             ctx.stroke();
             ctx.restore();
           }
+        }
+
+        // Draw Heartbeat
+        if (heartbeatConfig.show) {
+          analyser.getByteFrequencyData(dataArray);
+          const size = heartbeatConfig.size ?? 1;
+          const sens = heartbeatConfig.sensitivity ?? 1;
+
+          const cx = width * heartbeatConfig.x;
+          const cy = height * heartbeatConfig.y;
+
+          // Isolate Bass for impact
+          let bass = 0;
+          const bassRange = Math.floor(bufferLength * 0.1); // Only lowest 10%
+          for (let i = 0; i < bassRange; i++) {
+            bass += dataArray[i];
+          }
+          bass = (bass / bassRange) * sens;
+
+          // Target scale based on bass hit. Base size is very small (0.1) when quiet.
+          // Max scale leaps heavily on beats.
+          const targetScale = bass > 180 ? 1 + ((bass - 180) / 75) : 0.1 + (bass / 255) * 0.4;
+
+          // Snappy attack, smooth decay
+          const damping = targetScale > heartbeatScaleRef.current ? 0.3 : 0.05;
+          heartbeatScaleRef.current += (targetScale - heartbeatScaleRef.current) * damping;
+
+          const currentScale = heartbeatScaleRef.current * size;
+          const { r, g, b } = smoothedMoodRef.current;
+
+          // Draw "Heart" or glowing central mass
+          ctx.save();
+          ctx.beginPath();
+          // We'll draw an aggressive, glowing circle that feels like a heart pumping
+          const maxRadius = Math.min(width, height) * 0.15;
+          ctx.arc(cx, cy, maxRadius * currentScale, 0, 2 * Math.PI);
+
+          if (heartbeatConfig.color) {
+            ctx.fillStyle = heartbeatConfig.color;
+            ctx.shadowColor = heartbeatConfig.color;
+          } else {
+            ctx.fillStyle = `rgba(${r}, ${g}, ${b}, 0.9)`;
+            ctx.shadowColor = `rgba(${r}, ${g}, ${b}, 1)`;
+          }
+
+          // Intense glow when big
+          ctx.shadowBlur = Math.max(0, currentScale * 60);
+          ctx.fill();
+
+          // Inner core that fades in on heavy hits
+          const innerAlpha = Math.max(0, (heartbeatScaleRef.current - 0.5) * 2);
+          if (innerAlpha > 0) {
+            ctx.beginPath();
+            ctx.arc(cx, cy, maxRadius * currentScale * 0.5, 0, 2 * Math.PI);
+            ctx.fillStyle = `rgba(255, 255, 255, ${innerAlpha})`;
+            ctx.fill();
+          }
+          ctx.restore();
         }
 
         // Draw Wave
@@ -545,7 +606,7 @@ const Visualizer = forwardRef<HTMLCanvasElement, VisualizerProps>(({
         cancelAnimationFrame(requestRef.current);
       }
     };
-  }, [analyser, isPlaying, lyrics, currentTime, circleConfig, waveConfig, subtleWaveConfig, midiConfig, lyricsConfig, backgroundMedia, backgroundDim]);
+  }, [analyser, isPlaying, lyrics, currentTime, circleConfig, heartbeatConfig, waveConfig, subtleWaveConfig, midiConfig, lyricsConfig, backgroundMedia, backgroundDim]);
 
   // Handle resize
   useEffect(() => {
