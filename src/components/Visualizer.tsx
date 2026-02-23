@@ -46,7 +46,7 @@ const Visualizer = forwardRef<HTMLCanvasElement, VisualizerProps>(({
   const requestRef = useRef<number>();
   const smoothedMoodRef = useRef({ r: 100, g: 50, b: 255, hueOffset: 0 });
   const midiHistoryRef = useRef<Uint8Array[]>([]);
-  const heartbeatScaleRef = useRef(0);
+  const heartbeatHistoryRef = useRef<number[]>([]);
 
 
   useImperativeHandle(ref, () => internalCanvasRef.current as HTMLCanvasElement);
@@ -187,13 +187,12 @@ const Visualizer = forwardRef<HTMLCanvasElement, VisualizerProps>(({
           }
         }
 
-        // Draw Heartbeat
+        // Draw Heartbeat EKG Line
         if (heartbeatConfig.show) {
           analyser.getByteFrequencyData(dataArray);
           const size = heartbeatConfig.size ?? 1;
           const sens = heartbeatConfig.sensitivity ?? 1;
 
-          const cx = width * heartbeatConfig.x;
           const cy = height * heartbeatConfig.y;
 
           // Isolate Bass for impact
@@ -204,44 +203,60 @@ const Visualizer = forwardRef<HTMLCanvasElement, VisualizerProps>(({
           }
           bass = (bass / bassRange) * sens;
 
-          // Target scale based on bass hit. Base size is very small (0.1) when quiet.
-          // Max scale leaps heavily on beats.
-          const targetScale = bass > 180 ? 1 + ((bass - 180) / 75) : 0.1 + (bass / 255) * 0.4;
+          // Calculate height spike. Only spike on hard beats.
+          let spike = 0;
+          if (bass > 160) {
+            spike = ((bass - 160) / 95) * (height * 0.25) * size;
+          }
 
-          // Snappy attack, smooth decay
-          const damping = targetScale > heartbeatScaleRef.current ? 0.3 : 0.05;
-          heartbeatScaleRef.current += (targetScale - heartbeatScaleRef.current) * damping;
+          // Push newest spike to the front of the array
+          heartbeatHistoryRef.current.unshift(spike);
 
-          const currentScale = heartbeatScaleRef.current * size;
+          const numPoints = 200; // Line resolution
+          const spacing = width / numPoints;
+
+          if (heartbeatHistoryRef.current.length > numPoints) {
+            heartbeatHistoryRef.current.pop();
+          }
+
           const { r, g, b } = smoothedMoodRef.current;
 
-          // Draw "Heart" or glowing central mass
           ctx.save();
           ctx.beginPath();
-          // We'll draw an aggressive, glowing circle that feels like a heart pumping
-          const maxRadius = Math.min(width, height) * 0.15;
-          ctx.arc(cx, cy, maxRadius * currentScale, 0, 2 * Math.PI);
+          // Start from right (x = width)
+          ctx.moveTo(width, cy);
+
+          for (let i = 0; i < heartbeatHistoryRef.current.length; i++) {
+            const x = width - (i * spacing);
+            let yOffset = heartbeatHistoryRef.current[i];
+
+            // Alternate direction slightly for that sharp EKG tick look
+            if (yOffset > 0) {
+              yOffset *= (i % 2 === 0 ? 1 : -0.3);
+            }
+
+            // Smooth base line when no spike
+            if (yOffset === 0) {
+              yOffset = Math.sin(Date.now() / 300 + i * 0.2) * 2;
+            }
+
+            ctx.lineTo(x, cy - yOffset);
+          }
+
+          ctx.lineWidth = 3 * size;
+          ctx.lineCap = 'round';
+          ctx.lineJoin = 'round';
 
           if (heartbeatConfig.color) {
-            ctx.fillStyle = heartbeatConfig.color;
+            ctx.strokeStyle = heartbeatConfig.color;
             ctx.shadowColor = heartbeatConfig.color;
           } else {
-            ctx.fillStyle = `rgba(${r}, ${g}, ${b}, 0.9)`;
+            ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, 0.9)`;
             ctx.shadowColor = `rgba(${r}, ${g}, ${b}, 1)`;
           }
 
-          // Intense glow when big
-          ctx.shadowBlur = Math.max(0, currentScale * 60);
-          ctx.fill();
-
-          // Inner core that fades in on heavy hits
-          const innerAlpha = Math.max(0, (heartbeatScaleRef.current - 0.5) * 2);
-          if (innerAlpha > 0) {
-            ctx.beginPath();
-            ctx.arc(cx, cy, maxRadius * currentScale * 0.5, 0, 2 * Math.PI);
-            ctx.fillStyle = `rgba(255, 255, 255, ${innerAlpha})`;
-            ctx.fill();
-          }
+          ctx.shadowBlur = 10;
+          ctx.stroke();
           ctx.restore();
         }
 
