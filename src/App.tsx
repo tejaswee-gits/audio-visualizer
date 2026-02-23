@@ -8,11 +8,12 @@ export default function App() {
   const [showDownloadMenu, setShowDownloadMenu] = useState(false);
   const [circleConfig, setCircleConfig] = useState<ElementConfig>({ show: true, x: 0.5, y: 0.5 });
   const [waveConfig, setWaveConfig] = useState<ElementConfig>({ show: true, x: 0.5, y: 0.85 });
+  const [subtleWaveConfig, setSubtleWaveConfig] = useState<ElementConfig>({ show: true, x: 0.5, y: 0.45 });
   const [midiConfig, setMidiConfig] = useState<ElementConfig>({ show: false, x: 0.5, y: 0.5 });
   const [lyricsConfig, setLyricsConfig] = useState<ElementConfig>({ show: true, x: 0.5, y: 0.5, karaoke: true, showNext: true });
   const [backgroundImage, setBackgroundImage] = useState<HTMLImageElement | null>(null);
   const [aspectRatio, setAspectRatio] = useState<'auto' | '16:9' | '9:16'>('auto');
-  const [recordingMode, setRecordingMode] = useState<'current' | 'circle' | 'wave' | 'midi' | 'lyrics' | null>(null);
+  const [recordingMode, setRecordingMode] = useState<'current' | 'circle' | 'wave' | 'subtleWave' | 'midi' | 'lyrics' | null>(null);
   const [autoTranscribe, setAutoTranscribe] = useState(true);
   const [isVideoMode, setIsVideoMode] = useState(false);
   const [backgroundDim, setBackgroundDim] = useState(0.75);
@@ -264,7 +265,7 @@ export default function App() {
     setIsPlaying(false);
   };
 
-  const startRecording = (mode: 'current' | 'circle' | 'wave' | 'midi' | 'lyrics') => {
+  const startRecording = (mode: 'current' | 'circle' | 'wave' | 'subtleWave' | 'midi' | 'lyrics') => {
     if (!audioCtxRef.current || !canvasRef.current || !audioRef.current) return;
 
     setRecordingMode(mode);
@@ -408,7 +409,7 @@ export default function App() {
     return currentTime >= line.startTime;
   });
 
-  const getEffectiveConfig = (type: 'circle' | 'wave' | 'midi' | 'lyrics', config: ElementConfig) => {
+  const getEffectiveConfig = (type: 'circle' | 'wave' | 'subtleWave' | 'midi' | 'lyrics', config: ElementConfig) => {
     if (!recordingMode || recordingMode === 'current') return config;
     return { ...config, show: recordingMode === type };
   };
@@ -483,6 +484,7 @@ export default function App() {
                 currentTime={currentTime}
                 circleConfig={getEffectiveConfig('circle', circleConfig)}
                 waveConfig={getEffectiveConfig('wave', waveConfig)}
+                subtleWaveConfig={getEffectiveConfig('subtleWave', subtleWaveConfig)}
                 midiConfig={getEffectiveConfig('midi', midiConfig)}
                 lyricsConfig={getEffectiveConfig('lyrics', lyricsConfig)}
                 backgroundMedia={backgroundImage || (isVideoMode ? audioRef.current : null)}
@@ -540,6 +542,7 @@ export default function App() {
                 <SettingGroup title="MIDI Roll" config={midiConfig} setConfig={setMidiConfig} />
                 <SettingGroup title="Circle" config={circleConfig} setConfig={setCircleConfig} />
                 <SettingGroup title="Wave" config={waveConfig} setConfig={setWaveConfig} />
+                <SettingGroup title="Subtle Wave" config={subtleWaveConfig} setConfig={setSubtleWaveConfig} />
               </div>
             </div>
           )}
@@ -659,6 +662,7 @@ export default function App() {
                           <button onClick={() => startRecording('current')} className="w-full text-left px-4 py-3 text-sm text-zinc-200 hover:bg-zinc-700 transition-colors border-b border-zinc-700/50">Combined (Current View)</button>
                           <button onClick={() => startRecording('circle')} className="w-full text-left px-4 py-3 text-sm text-zinc-200 hover:bg-zinc-700 transition-colors border-b border-zinc-700/50">Circle Only</button>
                           <button onClick={() => startRecording('wave')} className="w-full text-left px-4 py-3 text-sm text-zinc-200 hover:bg-zinc-700 transition-colors border-b border-zinc-700/50">Wave Only</button>
+                          <button onClick={() => startRecording('subtleWave')} className="w-full text-left px-4 py-3 text-sm text-zinc-200 hover:bg-zinc-700 transition-colors border-b border-zinc-700/50">Subtle Wave Only</button>
                           <button onClick={() => startRecording('midi')} className="w-full text-left px-4 py-3 text-sm text-zinc-200 hover:bg-zinc-700 transition-colors border-b border-zinc-700/50">Midi Only</button>
                           <button onClick={() => startRecording('lyrics')} className="w-full text-left px-4 py-3 text-sm text-zinc-200 hover:bg-zinc-700 transition-colors">Lyrics Only</button>
                         </div>

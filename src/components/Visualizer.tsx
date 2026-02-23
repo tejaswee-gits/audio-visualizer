@@ -28,6 +28,7 @@ interface VisualizerProps {
   currentTime: number;
   circleConfig: ElementConfig;
   waveConfig: ElementConfig;
+  subtleWaveConfig: ElementConfig;
   midiConfig: ElementConfig;
   lyricsConfig: ElementConfig;
   backgroundMedia: HTMLImageElement | HTMLVideoElement | null;
@@ -35,7 +36,7 @@ interface VisualizerProps {
 }
 
 const Visualizer = forwardRef<HTMLCanvasElement, VisualizerProps>(({
-  analyser, isPlaying, lyrics, currentTime, circleConfig, waveConfig, midiConfig, lyricsConfig, backgroundMedia, backgroundDim = 0.75
+  analyser, isPlaying, lyrics, currentTime, circleConfig, waveConfig, subtleWaveConfig, midiConfig, lyricsConfig, backgroundMedia, backgroundDim = 0.75
 }, ref) => {
   const internalCanvasRef = useRef<HTMLCanvasElement>(null);
   const requestRef = useRef<number>();
@@ -218,6 +219,44 @@ const Visualizer = forwardRef<HTMLCanvasElement, VisualizerProps>(({
           ctx.lineWidth = 2;
           ctx.strokeStyle = `hsla(${(hueOffset + 60) % 360}, 80%, 80%, 0.8)`;
           ctx.stroke();
+        }
+
+        // Draw Subtle Wave
+        if (subtleWaveConfig.show) {
+          analyser.getByteFrequencyData(dataArray);
+
+          const waveY = height * subtleWaveConfig.y;
+          const numPoints = 80;
+          const sliceWidth = width / numPoints;
+
+          const { r, g, b } = smoothedMoodRef.current;
+
+          ctx.beginPath();
+          ctx.moveTo(0, waveY);
+
+          for (let i = 0; i <= numPoints; i++) {
+            // Mirror from center but keep it much smaller and smoother
+            const distFromCenter = Math.abs(i - numPoints / 2) / (numPoints / 2);
+            const binIndex = Math.floor((1 - distFromCenter) * (bufferLength * 0.1)); // only lower frequencies
+            const val = dataArray[binIndex] || 0;
+
+            // Subtle height calculation
+            const yOffset = (val / 255) * (height * 0.04);
+            const edgeSmoothing = Math.pow(1 - distFromCenter, 2); // Smoother tapering
+
+            // Draw a single smooth sine-like wave
+            const offset = Math.sin(Date.now() / 500 + i * 0.1) * (val / 255) * 5;
+            ctx.lineTo(i * sliceWidth, waveY - (yOffset * edgeSmoothing) + offset);
+          }
+
+          ctx.lineWidth = 3;
+          ctx.lineCap = 'round';
+          ctx.lineJoin = 'round';
+          ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, 0.6)`;
+          ctx.shadowBlur = 10;
+          ctx.shadowColor = `rgba(${r}, ${g}, ${b}, 0.8)`;
+          ctx.stroke();
+          ctx.shadowBlur = 0; // reset shadow
         }
 
         // Draw MIDI
@@ -439,7 +478,7 @@ const Visualizer = forwardRef<HTMLCanvasElement, VisualizerProps>(({
         cancelAnimationFrame(requestRef.current);
       }
     };
-  }, [analyser, isPlaying, lyrics, currentTime, circleConfig, waveConfig, midiConfig, lyricsConfig, backgroundMedia, backgroundDim]);
+  }, [analyser, isPlaying, lyrics, currentTime, circleConfig, waveConfig, subtleWaveConfig, midiConfig, lyricsConfig, backgroundMedia, backgroundDim]);
 
   // Handle resize
   useEffect(() => {
