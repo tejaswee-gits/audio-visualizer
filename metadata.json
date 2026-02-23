@@ -1,0 +1,5 @@
+{
+  "name": "Audio Visualizer",
+  "description": "Upload an audio file to see beautiful, real-time visual effects including frequency bars, waveforms, and piano-style visualizations.",
+  "requestFramePermissions": []
+}
