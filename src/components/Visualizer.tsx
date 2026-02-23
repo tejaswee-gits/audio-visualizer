@@ -17,6 +17,9 @@ export interface ElementConfig {
   show: boolean;
   x: number;
   y: number;
+  size?: number;
+  sensitivity?: number;
+  color?: string;
   karaoke?: boolean;
   showNext?: boolean;
 }
@@ -107,10 +110,14 @@ const Visualizer = forwardRef<HTMLCanvasElement, VisualizerProps>(({
         // Draw Circle
         if (circleConfig.show) {
           analyser.getByteFrequencyData(dataArray);
+          const size = circleConfig.size ?? 1;
+          const sens = circleConfig.sensitivity ?? 1;
+
           const cx = width * circleConfig.x;
           const cy = height * circleConfig.y;
-          const radius = Math.min(width, height) * 0.25;
-          const avg = dataArray.reduce((a, b) => a + b, 0) / bufferLength;
+          const radius = Math.min(width, height) * 0.25 * size;
+          const rawAvg = dataArray.reduce((a, b) => a + b, 0) / bufferLength;
+          const avg = rawAvg * sens;
 
           let bass = 0, mid = 0, treble = 0;
           const third = Math.floor(bufferLength / 3);
@@ -135,16 +142,23 @@ const Visualizer = forwardRef<HTMLCanvasElement, VisualizerProps>(({
 
           const { r, g, b, hueOffset } = smoothedMoodRef.current;
 
+          ctx.save();
           ctx.beginPath();
           ctx.arc(cx, cy, radius + avg * 0.3, 0, 2 * Math.PI);
-          ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${(avg / 255) * 0.4})`;
+          if (circleConfig.color) {
+            ctx.fillStyle = circleConfig.color;
+            ctx.globalAlpha = Math.min(1, (avg / 255) * 0.4);
+          } else {
+            ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${(avg / 255) * 0.4})`;
+          }
           ctx.fill();
+          ctx.restore();
 
           const bars = 120;
           const step = Math.floor((bufferLength * 0.5) / bars);
 
           for (let i = 0; i < bars; i++) {
-            const val = dataArray[i * step];
+            const val = dataArray[i * step] * sens;
             const rads = (Math.PI * 2 * i) / bars - Math.PI / 2;
             const barHeight = val * 0.6;
 
@@ -153,19 +167,29 @@ const Visualizer = forwardRef<HTMLCanvasElement, VisualizerProps>(({
             const xEnd = cx + Math.cos(rads) * (radius + barHeight);
             const yEnd = cy + Math.sin(rads) * (radius + barHeight);
 
-            ctx.strokeStyle = `hsla(${((i / bars) * 360 + hueOffset) % 360}, 80%, 60%, 0.4)`;
-            ctx.lineWidth = 4;
+            ctx.save();
+            if (circleConfig.color) {
+              ctx.strokeStyle = circleConfig.color;
+              ctx.globalAlpha = 0.4;
+            } else {
+              ctx.strokeStyle = `hsla(${((i / bars) * 360 + hueOffset) % 360}, 80%, 60%, 0.4)`;
+            }
+            ctx.lineWidth = 4 * size;
             ctx.lineCap = 'round';
             ctx.beginPath();
             ctx.moveTo(x, y);
             ctx.lineTo(xEnd, yEnd);
             ctx.stroke();
+            ctx.restore();
           }
         }
 
         // Draw Wave
         if (waveConfig.show) {
           analyser.getByteFrequencyData(dataArray);
+
+          const size = waveConfig.size ?? 1;
+          const sens = waveConfig.sensitivity ?? 1;
 
           const waveY = height * waveConfig.y;
           const numPoints = 120;
@@ -178,15 +202,12 @@ const Visualizer = forwardRef<HTMLCanvasElement, VisualizerProps>(({
 
           // Top half
           for (let i = 0; i <= numPoints; i++) {
-            // Mirror the frequency data from center
             const distFromCenter = Math.abs(i - numPoints / 2) / (numPoints / 2);
             const binIndex = Math.floor((1 - distFromCenter) * (bufferLength * 0.25));
-            const val = dataArray[binIndex] || 0;
-            const yOffset = (val / 255) * (height * 0.15);
+            const val = (dataArray[binIndex] || 0) * sens;
+            const yOffset = (val / 255) * (height * 0.15) * size;
 
-            // Smooth out the edges
             const edgeSmoothing = 1 - Math.pow(distFromCenter, 2);
-
             ctx.lineTo(i * sliceWidth, waveY - (yOffset * edgeSmoothing));
           }
 
@@ -194,36 +215,50 @@ const Visualizer = forwardRef<HTMLCanvasElement, VisualizerProps>(({
           for (let i = numPoints; i >= 0; i--) {
             const distFromCenter = Math.abs(i - numPoints / 2) / (numPoints / 2);
             const binIndex = Math.floor((1 - distFromCenter) * (bufferLength * 0.25));
-            const val = dataArray[binIndex] || 0;
-            const yOffset = (val / 255) * (height * 0.15);
+            const val = (dataArray[binIndex] || 0) * sens;
+            const yOffset = (val / 255) * (height * 0.15) * size;
 
             const edgeSmoothing = 1 - Math.pow(distFromCenter, 2);
-
             ctx.lineTo(i * sliceWidth, waveY + (yOffset * edgeSmoothing));
           }
 
           ctx.closePath();
 
-          // Gradient fill
-          const gradient = ctx.createLinearGradient(0, 0, width, 0);
-          gradient.addColorStop(0, `hsla(${hueOffset % 360}, 80%, 60%, 0.0)`);
-          gradient.addColorStop(0.2, `hsla(${(hueOffset + 30) % 360}, 80%, 60%, 0.4)`);
-          gradient.addColorStop(0.5, `hsla(${(hueOffset + 60) % 360}, 80%, 60%, 0.8)`);
-          gradient.addColorStop(0.8, `hsla(${(hueOffset + 90) % 360}, 80%, 60%, 0.4)`);
-          gradient.addColorStop(1, `hsla(${(hueOffset + 120) % 360}, 80%, 60%, 0.0)`);
+          ctx.save();
+          if (waveConfig.color) {
+            ctx.fillStyle = waveConfig.color;
+            ctx.globalAlpha = 0.5;
+            ctx.fill();
+            ctx.strokeStyle = waveConfig.color;
+            ctx.globalAlpha = 0.8;
+            ctx.lineWidth = 2 * size;
+            ctx.stroke();
+          } else {
+            // Gradient fill
+            const gradient = ctx.createLinearGradient(0, 0, width, 0);
+            gradient.addColorStop(0, `hsla(${hueOffset % 360}, 80%, 60%, 0.0)`);
+            gradient.addColorStop(0.2, `hsla(${(hueOffset + 30) % 360}, 80%, 60%, 0.4)`);
+            gradient.addColorStop(0.5, `hsla(${(hueOffset + 60) % 360}, 80%, 60%, 0.8)`);
+            gradient.addColorStop(0.8, `hsla(${(hueOffset + 90) % 360}, 80%, 60%, 0.4)`);
+            gradient.addColorStop(1, `hsla(${(hueOffset + 120) % 360}, 80%, 60%, 0.0)`);
 
-          ctx.fillStyle = gradient;
-          ctx.fill();
+            ctx.fillStyle = gradient;
+            ctx.fill();
 
-          // Outline
-          ctx.lineWidth = 2;
-          ctx.strokeStyle = `hsla(${(hueOffset + 60) % 360}, 80%, 80%, 0.8)`;
-          ctx.stroke();
+            // Outline
+            ctx.lineWidth = 2 * size;
+            ctx.strokeStyle = `hsla(${(hueOffset + 60) % 360}, 80%, 80%, 0.8)`;
+            ctx.stroke();
+          }
+          ctx.restore();
         }
 
         // Draw Subtle Wave
         if (subtleWaveConfig.show) {
           analyser.getByteFrequencyData(dataArray);
+
+          const size = subtleWaveConfig.size ?? 1;
+          const sens = subtleWaveConfig.sensitivity ?? 1;
 
           const waveY = height * subtleWaveConfig.y;
           const numPoints = 80;
@@ -238,25 +273,32 @@ const Visualizer = forwardRef<HTMLCanvasElement, VisualizerProps>(({
             // Mirror from center but keep it much smaller and smoother
             const distFromCenter = Math.abs(i - numPoints / 2) / (numPoints / 2);
             const binIndex = Math.floor((1 - distFromCenter) * (bufferLength * 0.1)); // only lower frequencies
-            const val = dataArray[binIndex] || 0;
+            const val = (dataArray[binIndex] || 0) * sens;
 
             // Subtle height calculation
-            const yOffset = (val / 255) * (height * 0.04);
+            const yOffset = (val / 255) * (height * 0.04) * size;
             const edgeSmoothing = Math.pow(1 - distFromCenter, 2); // Smoother tapering
 
             // Draw a single smooth sine-like wave
-            const offset = Math.sin(Date.now() / 500 + i * 0.1) * (val / 255) * 5;
+            const offset = Math.sin(Date.now() / 500 + i * 0.1) * (val / 255) * 5 * size;
             ctx.lineTo(i * sliceWidth, waveY - (yOffset * edgeSmoothing) + offset);
           }
 
-          ctx.lineWidth = 3;
+          ctx.save();
+          ctx.lineWidth = 3 * size;
           ctx.lineCap = 'round';
           ctx.lineJoin = 'round';
-          ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, 0.6)`;
+          if (subtleWaveConfig.color) {
+            ctx.strokeStyle = subtleWaveConfig.color;
+            ctx.shadowColor = subtleWaveConfig.color;
+            ctx.globalAlpha = 0.8;
+          } else {
+            ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, 0.6)`;
+            ctx.shadowColor = `rgba(${r}, ${g}, ${b}, 0.8)`;
+          }
           ctx.shadowBlur = 10;
-          ctx.shadowColor = `rgba(${r}, ${g}, ${b}, 0.8)`;
           ctx.stroke();
-          ctx.shadowBlur = 0; // reset shadow
+          ctx.restore();
         }
 
         // Draw MIDI
@@ -268,10 +310,13 @@ const Visualizer = forwardRef<HTMLCanvasElement, VisualizerProps>(({
             midiHistoryRef.current.pop();
           }
 
+          const size = midiConfig.size ?? 1;
+          const sens = midiConfig.sensitivity ?? 1;
+
           const mx = width * midiConfig.x;
           const my = height * midiConfig.y;
-          const midiWidth = width * 0.9;
-          const midiHeight = height * 0.6;
+          const midiWidth = width * 0.9 * size;
+          const midiHeight = height * 0.6 * size;
           const startX = mx - midiWidth / 2;
           const startY = my - midiHeight / 2;
 
@@ -282,6 +327,10 @@ const Visualizer = forwardRef<HTMLCanvasElement, VisualizerProps>(({
           const { hueOffset } = smoothedMoodRef.current;
 
           ctx.save();
+          if (midiConfig.color) {
+            ctx.shadowColor = midiConfig.color;
+            ctx.shadowBlur = 5;
+          }
 
           // Draw falling notes
           for (let h = 0; h < midiHistoryRef.current.length; h++) {
@@ -291,23 +340,33 @@ const Visualizer = forwardRef<HTMLCanvasElement, VisualizerProps>(({
             for (let i = 0; i < numKeys; i++) {
               // Non-linear mapping to emphasize musical notes
               const binIndex = Math.floor(Math.pow(i / numKeys, 2) * 150) + 2;
-              const val = rowData[binIndex];
+              const val = rowData[binIndex] * sens;
 
               if (val > 100) {
                 const intensity = (val - 100) / 155;
-                ctx.fillStyle = `hsla(${((i / numKeys) * 360 + hueOffset) % 360}, 80%, 60%, ${intensity * 0.9})`;
+                if (midiConfig.color) {
+                  ctx.globalAlpha = intensity;
+                  ctx.fillStyle = midiConfig.color;
+                } else {
+                  ctx.fillStyle = `hsla(${((i / numKeys) * 360 + hueOffset) % 360}, 80%, 60%, ${intensity * 0.9})`;
+                }
                 ctx.fillRect(startX + i * keyWidth + 1, y - rowHeight, keyWidth - 2, rowHeight + 1);
               }
             }
           }
+          ctx.globalAlpha = 1;
 
           // Draw "keyboard" or base line at the bottom
           for (let i = 0; i < numKeys; i++) {
             const binIndex = Math.floor(Math.pow(i / numKeys, 2) * 150) + 2;
-            const val = dataArray[binIndex];
+            const val = dataArray[binIndex] * sens;
             const isPressed = val > 100;
 
-            ctx.fillStyle = isPressed ? `hsla(${((i / numKeys) * 360 + hueOffset) % 360}, 80%, 70%, 1)` : 'rgba(255, 255, 255, 0.05)';
+            if (midiConfig.color) {
+              ctx.fillStyle = isPressed ? midiConfig.color : 'rgba(255, 255, 255, 0.05)';
+            } else {
+              ctx.fillStyle = isPressed ? `hsla(${((i / numKeys) * 360 + hueOffset) % 360}, 80%, 70%, 1)` : 'rgba(255, 255, 255, 0.05)';
+            }
             ctx.fillRect(startX + i * keyWidth + 1, startY + midiHeight, keyWidth - 2, 8);
           }
 
@@ -346,6 +405,8 @@ const Visualizer = forwardRef<HTMLCanvasElement, VisualizerProps>(({
           let scale = 0.8;
           let yOffset = 0;
 
+          const sizeMultiplier = lyricsConfig.size ?? 1;
+
           if (currentTime < activeLine.startTime) {
             // Animating in (Bounce)
             progress = (currentTime - (activeLine.startTime - PRE_ROLL)) / PRE_ROLL;
@@ -358,19 +419,19 @@ const Visualizer = forwardRef<HTMLCanvasElement, VisualizerProps>(({
             // easeOutQuad for opacity
             opacity = 1 - (1 - progress) * (1 - progress);
 
-            scale = 0.5 + 0.5 * bounceEase;
+            scale = (0.5 + 0.5 * bounceEase) * sizeMultiplier;
             yOffset = 40 * (1 - bounceEase);
           } else if (currentTime > activeLine.endTime) {
             // Animating out (Fade-out-down)
             progress = (currentTime - activeLine.endTime) / POST_ROLL;
             const ease = progress * progress; // easeInQuad
             opacity = 1 - ease;
-            scale = 1 - 0.1 * ease;
+            scale = (1 - 0.1 * ease) * sizeMultiplier;
             yOffset = 40 * ease; // Move down
           } else {
             // Fully visible
             opacity = 1;
-            scale = 1;
+            scale = 1 * sizeMultiplier;
             yOffset = 0;
           }
 
@@ -383,6 +444,8 @@ const Visualizer = forwardRef<HTMLCanvasElement, VisualizerProps>(({
           ctx.shadowColor = 'rgba(168, 85, 247, 0.8)';
           ctx.shadowBlur = 20 + (Math.sin(Date.now() / 200) * 10);
           ctx.font = 'bold 64px system-ui, -apple-system, sans-serif';
+
+          const baseColor = lyricsConfig.color || '#ffffff';
 
           if (lyricsConfig.karaoke) {
             let fillProgress = 0;
@@ -422,7 +485,8 @@ const Visualizer = forwardRef<HTMLCanvasElement, VisualizerProps>(({
             }
 
             // Draw faded background text
-            ctx.fillStyle = `rgba(255, 255, 255, ${opacity * 0.3})`;
+            ctx.globalAlpha = opacity * 0.3;
+            ctx.fillStyle = baseColor;
             ctx.fillText(activeLine.text, 0, 0, maxWidth);
 
             // Draw filled text
@@ -432,11 +496,13 @@ const Visualizer = forwardRef<HTMLCanvasElement, VisualizerProps>(({
             const startX = -textWidth / 2;
             ctx.rect(startX, -100, textWidth * fillProgress, 200);
             ctx.clip();
-            ctx.fillStyle = `rgba(255, 255, 255, ${opacity})`;
+            ctx.globalAlpha = opacity;
+            ctx.fillStyle = baseColor;
             ctx.fillText(activeLine.text, 0, 0, maxWidth);
             ctx.restore();
           } else {
-            ctx.fillStyle = `rgba(255, 255, 255, ${opacity})`;
+            ctx.globalAlpha = opacity;
+            ctx.fillStyle = baseColor;
             ctx.fillText(activeLine.text, 0, 0, maxWidth);
           }
 
@@ -459,10 +525,11 @@ const Visualizer = forwardRef<HTMLCanvasElement, VisualizerProps>(({
           if (nextOpacity > 0) {
             ctx.save();
             ctx.translate(lx, ly + nextYOffset);
-            ctx.scale(0.6, 0.6);
+            ctx.scale(0.6 * sizeMultiplier, 0.6 * sizeMultiplier);
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
-            ctx.fillStyle = `rgba(255, 255, 255, ${nextOpacity})`;
+            ctx.globalAlpha = nextOpacity;
+            ctx.fillStyle = baseColor;
             ctx.font = '600 64px system-ui, -apple-system, sans-serif';
             ctx.fillText(nextLine.text, 0, 0, maxWidth);
             ctx.restore();

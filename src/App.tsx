@@ -725,6 +725,49 @@ function SettingGroup({ title, config, setConfig }: { title: string, config: Ele
               className="w-full accent-indigo-500 h-1 bg-zinc-800 rounded-lg appearance-none cursor-pointer"
             />
           </div>
+          <div>
+            <div className="flex justify-between text-xs text-zinc-500 mb-1">
+              <span>Size</span>
+              <span>{Math.round((config.size ?? 1) * 100)}%</span>
+            </div>
+            <input
+              type="range" min="0.1" max="3" step="0.1"
+              value={config.size ?? 1}
+              onChange={e => setConfig({ ...config, size: parseFloat(e.target.value) })}
+              className="w-full accent-indigo-500 h-1 bg-zinc-800 rounded-lg appearance-none cursor-pointer"
+            />
+          </div>
+          <div>
+            <div className="flex justify-between text-xs text-zinc-500 mb-1">
+              <span>Sensitivity</span>
+              <span>{Math.round((config.sensitivity ?? 1) * 100)}%</span>
+            </div>
+            <input
+              type="range" min="0.1" max="3" step="0.1"
+              value={config.sensitivity ?? 1}
+              onChange={e => setConfig({ ...config, sensitivity: parseFloat(e.target.value) })}
+              className="w-full accent-indigo-500 h-1 bg-zinc-800 rounded-lg appearance-none cursor-pointer"
+            />
+          </div>
+          <div className="flex items-center justify-between text-xs text-zinc-500">
+            <span>Color Overlay</span>
+            <div className="flex items-center gap-2">
+              {config.color && (
+                <button
+                  onClick={() => setConfig({ ...config, color: undefined })}
+                  className="text-red-400 hover:text-red-300 px-2 py-0.5 rounded bg-red-500/10"
+                >
+                  Auto
+                </button>
+              )}
+              <input
+                type="color"
+                value={config.color || '#ffffff'}
+                onChange={e => setConfig({ ...config, color: e.target.value })}
+                className="w-6 h-6 rounded cursor-pointer bg-transparent border-none p-0"
+              />
+            </div>
+          </div>
           {config.karaoke !== undefined && (
             <div className="flex items-center justify-between pt-2 border-t border-zinc-800/50">
               <span className="text-xs text-zinc-400">Karaoke Fill Effect</span>
