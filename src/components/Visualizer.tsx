@@ -31,10 +31,11 @@ interface VisualizerProps {
   midiConfig: ElementConfig;
   lyricsConfig: ElementConfig;
   backgroundMedia: HTMLImageElement | HTMLVideoElement | null;
+  backgroundDim?: number;
 }
 
-const Visualizer = forwardRef<HTMLCanvasElement, VisualizerProps>(({ 
-  analyser, isPlaying, lyrics, currentTime, circleConfig, waveConfig, midiConfig, lyricsConfig, backgroundMedia 
+const Visualizer = forwardRef<HTMLCanvasElement, VisualizerProps>(({
+  analyser, isPlaying, lyrics, currentTime, circleConfig, waveConfig, midiConfig, lyricsConfig, backgroundMedia, backgroundDim = 0.75
 }, ref) => {
   const internalCanvasRef = useRef<HTMLCanvasElement>(null);
   const requestRef = useRef<number>();
@@ -68,7 +69,7 @@ const Visualizer = forwardRef<HTMLCanvasElement, VisualizerProps>(({
 
       if (backgroundMedia) {
         ctx.clearRect(0, 0, width, height);
-        
+
         let mediaWidth = 0;
         let mediaHeight = 0;
         if (backgroundMedia instanceof HTMLVideoElement) {
@@ -94,10 +95,10 @@ const Visualizer = forwardRef<HTMLCanvasElement, VisualizerProps>(({
           offsetY = (height - drawHeight) / 2;
         }
         ctx.drawImage(backgroundMedia, offsetX, offsetY, drawWidth, drawHeight);
-        ctx.fillStyle = 'rgba(10, 10, 15, 0.75)';
+        ctx.fillStyle = `rgba(10, 10, 15, ${backgroundDim})`;
         ctx.fillRect(0, 0, width, height);
       } else {
-        ctx.fillStyle = 'rgba(10, 10, 15, 0.3)';
+        ctx.fillStyle = `rgba(10, 10, 15, ${Math.min(backgroundDim, 0.3)})`;
         ctx.fillRect(0, 0, width, height);
       }
 
@@ -109,7 +110,7 @@ const Visualizer = forwardRef<HTMLCanvasElement, VisualizerProps>(({
           const cy = height * circleConfig.y;
           const radius = Math.min(width, height) * 0.25;
           const avg = dataArray.reduce((a, b) => a + b, 0) / bufferLength;
-          
+
           let bass = 0, mid = 0, treble = 0;
           const third = Math.floor(bufferLength / 3);
           if (third > 0) {
@@ -164,16 +165,16 @@ const Visualizer = forwardRef<HTMLCanvasElement, VisualizerProps>(({
         // Draw Wave
         if (waveConfig.show) {
           analyser.getByteFrequencyData(dataArray);
-          
+
           const waveY = height * waveConfig.y;
           const numPoints = 120;
           const sliceWidth = width / numPoints;
-          
+
           const { hueOffset } = smoothedMoodRef.current;
 
           ctx.beginPath();
           ctx.moveTo(0, waveY);
-          
+
           // Top half
           for (let i = 0; i <= numPoints; i++) {
             // Mirror the frequency data from center
@@ -181,27 +182,27 @@ const Visualizer = forwardRef<HTMLCanvasElement, VisualizerProps>(({
             const binIndex = Math.floor((1 - distFromCenter) * (bufferLength * 0.25));
             const val = dataArray[binIndex] || 0;
             const yOffset = (val / 255) * (height * 0.15);
-            
+
             // Smooth out the edges
             const edgeSmoothing = 1 - Math.pow(distFromCenter, 2);
-            
+
             ctx.lineTo(i * sliceWidth, waveY - (yOffset * edgeSmoothing));
           }
-          
+
           // Bottom half
           for (let i = numPoints; i >= 0; i--) {
             const distFromCenter = Math.abs(i - numPoints / 2) / (numPoints / 2);
             const binIndex = Math.floor((1 - distFromCenter) * (bufferLength * 0.25));
             const val = dataArray[binIndex] || 0;
             const yOffset = (val / 255) * (height * 0.15);
-            
+
             const edgeSmoothing = 1 - Math.pow(distFromCenter, 2);
-            
+
             ctx.lineTo(i * sliceWidth, waveY + (yOffset * edgeSmoothing));
           }
-          
+
           ctx.closePath();
-          
+
           // Gradient fill
           const gradient = ctx.createLinearGradient(0, 0, width, 0);
           gradient.addColorStop(0, `hsla(${hueOffset % 360}, 80%, 60%, 0.0)`);
@@ -209,10 +210,10 @@ const Visualizer = forwardRef<HTMLCanvasElement, VisualizerProps>(({
           gradient.addColorStop(0.5, `hsla(${(hueOffset + 60) % 360}, 80%, 60%, 0.8)`);
           gradient.addColorStop(0.8, `hsla(${(hueOffset + 90) % 360}, 80%, 60%, 0.4)`);
           gradient.addColorStop(1, `hsla(${(hueOffset + 120) % 360}, 80%, 60%, 0.0)`);
-          
+
           ctx.fillStyle = gradient;
           ctx.fill();
-          
+
           // Outline
           ctx.lineWidth = 2;
           ctx.strokeStyle = `hsla(${(hueOffset + 60) % 360}, 80%, 80%, 0.8)`;
@@ -242,17 +243,17 @@ const Visualizer = forwardRef<HTMLCanvasElement, VisualizerProps>(({
           const { hueOffset } = smoothedMoodRef.current;
 
           ctx.save();
-          
+
           // Draw falling notes
           for (let h = 0; h < midiHistoryRef.current.length; h++) {
             const rowData = midiHistoryRef.current[h];
             const y = startY + midiHeight - (h * rowHeight);
-            
+
             for (let i = 0; i < numKeys; i++) {
               // Non-linear mapping to emphasize musical notes
-              const binIndex = Math.floor(Math.pow(i / numKeys, 2) * 150) + 2; 
+              const binIndex = Math.floor(Math.pow(i / numKeys, 2) * 150) + 2;
               const val = rowData[binIndex];
-              
+
               if (val > 100) {
                 const intensity = (val - 100) / 155;
                 ctx.fillStyle = `hsla(${((i / numKeys) * 360 + hueOffset) % 360}, 80%, 60%, ${intensity * 0.9})`;
@@ -260,15 +261,15 @@ const Visualizer = forwardRef<HTMLCanvasElement, VisualizerProps>(({
               }
             }
           }
-          
+
           // Draw "keyboard" or base line at the bottom
           for (let i = 0; i < numKeys; i++) {
-             const binIndex = Math.floor(Math.pow(i / numKeys, 2) * 150) + 2; 
-             const val = dataArray[binIndex];
-             const isPressed = val > 100;
-             
-             ctx.fillStyle = isPressed ? `hsla(${((i / numKeys) * 360 + hueOffset) % 360}, 80%, 70%, 1)` : 'rgba(255, 255, 255, 0.05)';
-             ctx.fillRect(startX + i * keyWidth + 1, startY + midiHeight, keyWidth - 2, 8);
+            const binIndex = Math.floor(Math.pow(i / numKeys, 2) * 150) + 2;
+            const val = dataArray[binIndex];
+            const isPressed = val > 100;
+
+            ctx.fillStyle = isPressed ? `hsla(${((i / numKeys) * 360 + hueOffset) % 360}, 80%, 70%, 1)` : 'rgba(255, 255, 255, 0.05)';
+            ctx.fillRect(startX + i * keyWidth + 1, startY + midiHeight, keyWidth - 2, 8);
           }
 
           ctx.restore();
@@ -279,7 +280,7 @@ const Visualizer = forwardRef<HTMLCanvasElement, VisualizerProps>(({
       if (lyricsConfig.show && lyrics && lyrics.length > 0) {
         const PRE_ROLL = 0.4;
         const POST_ROLL = 0.4;
-        
+
         let activeIndex = lyrics.findIndex(line => currentTime >= line.startTime && currentTime <= line.endTime);
         if (activeIndex === -1) {
           activeIndex = lyrics.findIndex(line => currentTime >= line.startTime - PRE_ROLL && currentTime <= line.endTime + POST_ROLL);
@@ -287,7 +288,7 @@ const Visualizer = forwardRef<HTMLCanvasElement, VisualizerProps>(({
 
         const activeLine = activeIndex !== -1 ? lyrics[activeIndex] : null;
         let nextLine = null;
-        
+
         if (activeIndex !== -1) {
           if (activeIndex + 1 < lyrics.length) {
             nextLine = lyrics[activeIndex + 1];
@@ -309,15 +310,15 @@ const Visualizer = forwardRef<HTMLCanvasElement, VisualizerProps>(({
           if (currentTime < activeLine.startTime) {
             // Animating in (Bounce)
             progress = (currentTime - (activeLine.startTime - PRE_ROLL)) / PRE_ROLL;
-            
+
             // easeOutBack for bounce effect
             const c1 = 1.70158;
             const c3 = c1 + 1;
             const bounceEase = 1 + c3 * Math.pow(progress - 1, 3) + c1 * Math.pow(progress - 1, 2);
-            
+
             // easeOutQuad for opacity
             opacity = 1 - (1 - progress) * (1 - progress);
-            
+
             scale = 0.5 + 0.5 * bounceEase;
             yOffset = 40 * (1 - bounceEase);
           } else if (currentTime > activeLine.endTime) {
@@ -339,81 +340,81 @@ const Visualizer = forwardRef<HTMLCanvasElement, VisualizerProps>(({
           ctx.scale(scale, scale);
           ctx.textAlign = 'center';
           ctx.textBaseline = 'middle';
-          
+
           ctx.shadowColor = 'rgba(168, 85, 247, 0.8)';
           ctx.shadowBlur = 20 + (Math.sin(Date.now() / 200) * 10);
           ctx.font = 'bold 64px system-ui, -apple-system, sans-serif';
-          
-          if (lyricsConfig.karaoke) {
-             let fillProgress = 0;
-             
-             if (activeLine.words && activeLine.words.length > 0) {
-               const totalWidth = Math.min(ctx.measureText(activeLine.text).width, maxWidth);
-               
-               if (currentTime < activeLine.startTime) {
-                 fillProgress = 0;
-               } else if (currentTime > activeLine.endTime) {
-                 fillProgress = 1;
-               } else {
-                 let passedWidth = 0;
-                 for (let i = 0; i < activeLine.words.length; i++) {
-                   const w = activeLine.words[i];
-                   const wordText = w.word + (i < activeLine.words.length - 1 ? " " : "");
-                   const wordWidth = ctx.measureText(wordText).width;
-                   
-                   if (currentTime > w.endTime) {
-                     passedWidth += wordWidth;
-                   } else if (currentTime >= w.startTime && currentTime <= w.endTime) {
-                     const wordProgress = (currentTime - w.startTime) / (w.endTime - w.startTime);
-                     passedWidth += wordWidth * wordProgress;
-                     break;
-                   } else if (currentTime < w.startTime) {
-                     break;
-                   }
-                 }
-                 fillProgress = passedWidth / totalWidth;
-               }
-             } else {
-               if (currentTime >= activeLine.startTime && currentTime <= activeLine.endTime) {
-                 fillProgress = (currentTime - activeLine.startTime) / (activeLine.endTime - activeLine.startTime);
-               } else if (currentTime > activeLine.endTime) {
-                 fillProgress = 1;
-               }
-             }
 
-             // Draw faded background text
-             ctx.fillStyle = `rgba(255, 255, 255, ${opacity * 0.3})`;
-             ctx.fillText(activeLine.text, 0, 0, maxWidth);
-             
-             // Draw filled text
-             ctx.save();
-             ctx.beginPath();
-             const textWidth = Math.min(ctx.measureText(activeLine.text).width, maxWidth);
-             const startX = -textWidth / 2;
-             ctx.rect(startX, -100, textWidth * fillProgress, 200);
-             ctx.clip();
-             ctx.fillStyle = `rgba(255, 255, 255, ${opacity})`;
-             ctx.fillText(activeLine.text, 0, 0, maxWidth);
-             ctx.restore();
+          if (lyricsConfig.karaoke) {
+            let fillProgress = 0;
+
+            if (activeLine.words && activeLine.words.length > 0) {
+              const totalWidth = Math.min(ctx.measureText(activeLine.text).width, maxWidth);
+
+              if (currentTime < activeLine.startTime) {
+                fillProgress = 0;
+              } else if (currentTime > activeLine.endTime) {
+                fillProgress = 1;
+              } else {
+                let passedWidth = 0;
+                for (let i = 0; i < activeLine.words.length; i++) {
+                  const w = activeLine.words[i];
+                  const wordText = w.word + (i < activeLine.words.length - 1 ? " " : "");
+                  const wordWidth = ctx.measureText(wordText).width;
+
+                  if (currentTime > w.endTime) {
+                    passedWidth += wordWidth;
+                  } else if (currentTime >= w.startTime && currentTime <= w.endTime) {
+                    const wordProgress = (currentTime - w.startTime) / (w.endTime - w.startTime);
+                    passedWidth += wordWidth * wordProgress;
+                    break;
+                  } else if (currentTime < w.startTime) {
+                    break;
+                  }
+                }
+                fillProgress = passedWidth / totalWidth;
+              }
+            } else {
+              if (currentTime >= activeLine.startTime && currentTime <= activeLine.endTime) {
+                fillProgress = (currentTime - activeLine.startTime) / (activeLine.endTime - activeLine.startTime);
+              } else if (currentTime > activeLine.endTime) {
+                fillProgress = 1;
+              }
+            }
+
+            // Draw faded background text
+            ctx.fillStyle = `rgba(255, 255, 255, ${opacity * 0.3})`;
+            ctx.fillText(activeLine.text, 0, 0, maxWidth);
+
+            // Draw filled text
+            ctx.save();
+            ctx.beginPath();
+            const textWidth = Math.min(ctx.measureText(activeLine.text).width, maxWidth);
+            const startX = -textWidth / 2;
+            ctx.rect(startX, -100, textWidth * fillProgress, 200);
+            ctx.clip();
+            ctx.fillStyle = `rgba(255, 255, 255, ${opacity})`;
+            ctx.fillText(activeLine.text, 0, 0, maxWidth);
+            ctx.restore();
           } else {
-             ctx.fillStyle = `rgba(255, 255, 255, ${opacity})`;
-             ctx.fillText(activeLine.text, 0, 0, maxWidth);
+            ctx.fillStyle = `rgba(255, 255, 255, ${opacity})`;
+            ctx.fillText(activeLine.text, 0, 0, maxWidth);
           }
-          
+
           ctx.restore();
         }
 
         if (lyricsConfig.showNext && nextLine) {
           let nextOpacity = 0.4;
           let nextYOffset = 80;
-          
+
           if (!activeLine) {
-             const timeUntil = nextLine.startTime - currentTime;
-             if (timeUntil < 2) {
-               nextOpacity = 0.4 * (1 - timeUntil / 2);
-             } else {
-               nextOpacity = 0;
-             }
+            const timeUntil = nextLine.startTime - currentTime;
+            if (timeUntil < 2) {
+              nextOpacity = 0.4 * (1 - timeUntil / 2);
+            } else {
+              nextOpacity = 0;
+            }
           }
 
           if (nextOpacity > 0) {
@@ -438,7 +439,7 @@ const Visualizer = forwardRef<HTMLCanvasElement, VisualizerProps>(({
         cancelAnimationFrame(requestRef.current);
       }
     };
-  }, [analyser, isPlaying, lyrics, currentTime, circleConfig, waveConfig, midiConfig, lyricsConfig, backgroundMedia]);
+  }, [analyser, isPlaying, lyrics, currentTime, circleConfig, waveConfig, midiConfig, lyricsConfig, backgroundMedia, backgroundDim]);
 
   // Handle resize
   useEffect(() => {

@@ -15,6 +15,7 @@ export default function App() {
   const [recordingMode, setRecordingMode] = useState<'current' | 'circle' | 'wave' | 'midi' | 'lyrics' | null>(null);
   const [autoTranscribe, setAutoTranscribe] = useState(true);
   const [isVideoMode, setIsVideoMode] = useState(false);
+  const [backgroundDim, setBackgroundDim] = useState(0.75);
 
   const [audioFile, setAudioFile] = useState<File | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
@@ -271,7 +272,7 @@ export default function App() {
 
     // Small delay to allow React to apply the recordingMode configs
     setTimeout(() => {
-      const canvasStream = canvasRef.current!.captureStream(30);
+      const canvasStream = canvasRef.current!.captureStream(60);
       const dest = audioCtxRef.current!.createMediaStreamDestination();
       analyserRef.current?.connect(dest);
 
@@ -281,7 +282,7 @@ export default function App() {
       ];
       const combinedStream = new MediaStream(tracks);
 
-      const options = { mimeType: 'video/webm;codecs=vp9,opus' };
+      const options = { mimeType: 'video/webm;codecs=vp9,opus', videoBitsPerSecond: 8000000 };
       let recorder: MediaRecorder;
       try {
         recorder = new MediaRecorder(combinedStream, options);
@@ -485,6 +486,7 @@ export default function App() {
                 midiConfig={getEffectiveConfig('midi', midiConfig)}
                 lyricsConfig={getEffectiveConfig('lyrics', lyricsConfig)}
                 backgroundMedia={backgroundImage || (isVideoMode ? audioRef.current : null)}
+                backgroundDim={backgroundDim}
               />
             </div>
           )}
@@ -520,6 +522,18 @@ export default function App() {
                     {backgroundImage ? 'Change Image' : 'Upload Image'}
                     <input type="file" accept="image/*" className="hidden" onChange={handleBgUpload} />
                   </label>
+                  <div className="mt-4">
+                    <div className="flex justify-between text-xs text-zinc-500 mb-1">
+                      <span>Background Dim</span>
+                      <span>{Math.round(backgroundDim * 100)}%</span>
+                    </div>
+                    <input
+                      type="range" min="0" max="1" step="0.01"
+                      value={backgroundDim}
+                      onChange={e => setBackgroundDim(parseFloat(e.target.value))}
+                      className="w-full accent-indigo-500 h-1 bg-zinc-800 rounded-lg appearance-none cursor-pointer"
+                    />
+                  </div>
                 </div>
 
                 <SettingGroup title="Lyrics" config={lyricsConfig} setConfig={setLyricsConfig} />
