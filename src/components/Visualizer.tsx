@@ -47,6 +47,7 @@ const Visualizer = forwardRef<HTMLCanvasElement, VisualizerProps>(({
   const smoothedMoodRef = useRef({ r: 100, g: 50, b: 255, hueOffset: 0 });
   const midiHistoryRef = useRef<Uint8Array[]>([]);
   const heartbeatHistoryRef = useRef<number[]>([]);
+  const heartbeatLastSpikeRef = useRef<number>(0);
 
 
   useImperativeHandle(ref, () => internalCanvasRef.current as HTMLCanvasElement);
@@ -205,14 +206,19 @@ const Visualizer = forwardRef<HTMLCanvasElement, VisualizerProps>(({
 
           // Calculate height spike. Only spike on hard beats.
           let spike = 0;
-          if (bass > 160) {
-            spike = ((bass - 160) / 95) * (height * 0.25) * size;
+          const now = Date.now();
+          if (bass > 170 && now - heartbeatLastSpikeRef.current > 250) {
+            spike = ((bass - 170) / 85) * (height * 0.25) * size;
+            // We won't fully lock it out so it can have natural decay, but this ensures the peak is sharp
+            if (spike > height * 0.1) {
+              heartbeatLastSpikeRef.current = now;
+            }
           }
 
           // Push newest spike to the front of the array
           heartbeatHistoryRef.current.unshift(spike);
 
-          const numPoints = 200; // Line resolution
+          const numPoints = 800; // Increased line resolution to massively slow down EKG travel speed
           const spacing = width / numPoints;
 
           if (heartbeatHistoryRef.current.length > numPoints) {
@@ -230,14 +236,12 @@ const Visualizer = forwardRef<HTMLCanvasElement, VisualizerProps>(({
             const x = width - (i * spacing);
             let yOffset = heartbeatHistoryRef.current[i];
 
-            // Alternate direction slightly for that sharp EKG tick look
-            if (yOffset > 0) {
-              yOffset *= (i % 2 === 0 ? 1 : -0.3);
-            }
-
             // Smooth base line when no spike
             if (yOffset === 0) {
-              yOffset = Math.sin(Date.now() / 300 + i * 0.2) * 2;
+              yOffset = Math.sin(Date.now() / 300 + x * 0.01) * 2;
+            } else {
+              // Alternate direction slightly for that sharp EKG tick look, but based on fixed x-pos rather than shifting index
+              yOffset *= (i % 2 === 0 ? 1 : -0.4);
             }
 
             ctx.lineTo(x, cy - yOffset);
